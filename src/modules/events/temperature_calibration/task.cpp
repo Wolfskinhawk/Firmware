@@ -83,11 +83,11 @@ public:
 	 */
 	int		start();
 
-	static void do_temperature_calibration(int argc, char *argv[]);
+	static int do_temperature_calibration(int argc, char *argv[]);
 
 	void		task_main();
 
-	void exit() { _force_task_exit = true; }
+	void exit_task() { _force_task_exit = true; }
 
 private:
 	void publish_led_control(led_control_s &led_control);
@@ -217,7 +217,7 @@ void TemperatureCalibration::task_main()
 		if (!_gyro) {
 			sensor_gyro_s gyro_data;
 
-			for (int i = 0; i < num_gyro; ++i) {
+			for (unsigned i = 0; i < num_gyro; ++i) {
 				orb_copy(ORB_ID(sensor_gyro), gyro_sub[i], &gyro_data);
 			}
 		}
@@ -227,7 +227,13 @@ void TemperatureCalibration::task_main()
 		for (int i = 0; i < num_calibrators; ++i) {
 			ret = calibrators[i]->update();
 
-			if (ret == -TC_ERROR_INITIAL_TEMP_TOO_HIGH) {
+			if (ret == -TC_ERROR_COMMUNICATION) {
+				abort_calibration = true;
+				PX4_ERR("Calibration won't start - sensor bad or communication error");
+				_force_task_exit = true;
+				break;
+
+			} else if (ret == -TC_ERROR_INITIAL_TEMP_TOO_HIGH) {
 				abort_calibration = true;
 				PX4_ERR("Calibration won't start - sensor temperature too high");
 				_force_task_exit = true;
@@ -314,15 +320,15 @@ void TemperatureCalibration::task_main()
 	PX4_INFO("Exiting temperature calibration task");
 }
 
-void TemperatureCalibration::do_temperature_calibration(int argc, char *argv[])
+int TemperatureCalibration::do_temperature_calibration(int argc, char *argv[])
 {
 	temperature_calibration::instance->task_main();
+	return 0;
 }
 
 int TemperatureCalibration::start()
 {
 
-	ASSERT(_control_task == -1);
 	_control_task = px4_task_spawn_cmd("temperature_calib",
 					   SCHED_DEFAULT,
 					   SCHED_PRIORITY_MAX - 5,

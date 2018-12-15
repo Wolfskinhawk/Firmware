@@ -48,7 +48,7 @@ namespace control
 {
 
 static constexpr uint8_t maxChildrenPerBlock = 100;
-static constexpr uint8_t maxParamsPerBlock = 100;
+static constexpr uint8_t maxParamsPerBlock = 110;
 static constexpr uint8_t maxSubscriptionsPerBlock = 100;
 static constexpr uint8_t maxPublicationsPerBlock = 100;
 static constexpr uint8_t blockNameLengthMax = 40;
@@ -83,6 +83,8 @@ public:
 	float getDt() { return _dt; }
 
 protected:
+
+	virtual void updateParamsSubclass() {}
 
 	SuperBlock *getParent() { return _parent; }
 	List<uORB::SubscriptionNode *> &getSubscriptions() { return _subscriptions; }

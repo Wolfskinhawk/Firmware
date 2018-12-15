@@ -67,7 +67,7 @@
 #include <chip/kinetis_sim.h>
 #include <chip/kinetis_adc.h>
 
-#include <systemlib/perf_counter.h>
+#include <perf/perf_counter.h>
 
 #include <uORB/topics/system_power.h>
 #include <uORB/topics/adc_report.h>
@@ -110,8 +110,6 @@ typedef uint32_t 	adc_chan_t;
 #define rCLM2(adc)  REG(adc, KINETIS_ADC_CLM2_OFFSET) /* ADC minus-side general calibration value register */
 #define rCLM1(adc)  REG(adc, KINETIS_ADC_CLM1_OFFSET) /* ADC minus-side general calibration value register */
 #define rCLM0(adc)  REG(adc, KINETIS_ADC_CLM0_OFFSET) /* ADC minus-side general calibration value register */
-
-bool g_board_usb_connected = false;
 
 class ADC : public device::CDev
 {
@@ -219,7 +217,7 @@ ADC::init()
 	irqstate_t flags = px4_enter_critical_section();
 
 	_REG(KINETIS_SIM_SCGC3) |= SIM_SCGC3_ADC1;
-	rCFG1(1) = ADC_CFG1_ADICLK_BUSCLK | ADC_CFG1_MODE_1616BIT | ADC_CFG1_ADIV_DIV8;
+	rCFG1(1) = ADC_CFG1_ADICLK_BUSCLK | ADC_CFG1_MODE_1213BIT | ADC_CFG1_ADIV_DIV8;
 	rCFG2(1) = 0;
 	rSC2(1) = ADC_SC2_REFSEL_DEFAULT;
 
@@ -370,30 +368,20 @@ ADC::update_system_power(hrt_abstime now)
 	system_power_s system_power = {};
 	system_power.timestamp = now;
 
-	system_power.voltage5V_v = 0;
+	system_power.voltage5v_v = 0;
 
-#if defined(ADC_5V_RAIL_SENSE) || defined(BOARD_ADC_USB_CONNECTED)
+#if defined(ADC_5V_RAIL_SENSE)
 
 	for (unsigned i = 0; i < _channel_count; i++) {
-#if defined(ADC_5V_RAIL_SENSE)
 
 		if (_samples[i].am_channel == ADC_5V_RAIL_SENSE) {
 			// it is 2:1 scaled
-			system_power.voltage5V_v = _samples[i].am_data * (6.6f / 4096);
+			system_power.voltage5v_v = _samples[i].am_data * (6.6f / 4096.0f);
 		}
-
-#endif
-#if defined(BOARD_ADC_USB_CONNECTED)
-
-		if (_samples[i].am_channel == BOARD_ADC_USB_CONNECTED) {
-			// > that 50% assum connected
-			system_power.usb_connected = _samples[i].am_data > (4096 / 2);
-		}
-
-#endif
 	}
 
 #endif
+
 
 	/* Note once the board_config.h provides BOARD_ADC_USB_CONNECTED,
 	 * It must provide the true logic GPIO BOARD_ADC_xxxx macros.
@@ -401,14 +389,21 @@ ADC::update_system_power(hrt_abstime now)
 	// these are not ADC related, but it is convenient to
 	// publish these to the same topic
 
-	g_board_usb_connected = system_power.usb_connected;
+	system_power.usb_connected = BOARD_ADC_USB_CONNECTED;
+	/* If provided used the Valid signal from HW*/
+#if defined(BOARD_ADC_USB_VALID)
+	system_power.usb_valid = BOARD_ADC_USB_VALID;
+#else
+	/* If not provided then use connected */
+	system_power.usb_valid  = system_power.usb_connected;
+#endif
 
 	system_power.brick_valid   = BOARD_ADC_BRICK_VALID;
 	system_power.servo_valid   = BOARD_ADC_SERVO_VALID;
 
 	// OC pins are active low
-	system_power.periph_5V_OC  = BOARD_ADC_PERIPH_5V_OC;
-	system_power.hipower_5V_OC = BOARD_ADC_HIPOWER_5V_OC;
+	system_power.periph_5v_oc  = BOARD_ADC_PERIPH_5V_OC;
+	system_power.hipower_5v_oc = BOARD_ADC_HIPOWER_5V_OC;
 
 	/* lazily publish */
 	if (_to_system_power != nullptr) {
